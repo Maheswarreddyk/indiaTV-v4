@@ -112,6 +112,15 @@ export interface ConnectedUser {
   currentMatchId?: string;
   partnerSessionId?: string;
   lastPartnerSessionId?: string;
+  gender?: string;
+  lookingFor?: string[];
+  languages?: string[];
+  country?: string;
+  state?: string;
+  district?: string;
+  city?: string;
+  interestTags?: string[];
+  queueEnteredAt?: Date;
 }
 
 export interface MatchPair {

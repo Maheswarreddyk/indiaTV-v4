@@ -6,6 +6,7 @@ import {
   queueRepository,
   sessionRepository,
 } from '../database/repositories/index.js';
+import { getSupabase } from '../database/client.js';
 import { matchingEngine } from '../services/matchingEngine.js';
 import type { ConnectedUser } from '../types/index.js';
 
@@ -52,15 +53,17 @@ async function handleJoinQueue(io: Server, user: ConnectedUser): Promise<void> {
     await queueRepository.join(user.sessionId);
     await connectionLogRepository.log(user.sessionId, 'queue_join');
 
-    const partner = matchingEngine.tryMatch(user);
+    const matchResult = matchingEngine.tryMatch(user);
 
-    if (!partner) {
+    if (!matchResult) {
       io.to(user.socketId).emit('waiting', {
         queuePosition: matchingEngine.getQueueLength(),
         message: 'Waiting for a partner...',
       });
       return;
     }
+
+    const partner = matchResult.partner;
 
     const match = await matchRepository.create(user.sessionId, partner.sessionId);
 
@@ -162,6 +165,101 @@ export function setupSocketHandlers(io: Server): void {
       } catch (error) {
         console.error('[Socket] leave_queue error:', error);
         socket.emit('error', { message: 'Failed to leave queue' });
+      }
+    });
+
+    socket.on('preferences_updated', (data: { preferences: any }) => {
+      const existingUser = matchingEngine.getUserBySessionId(user.sessionId);
+      if (existingUser && data.preferences) {
+        existingUser.gender = data.preferences.gender;
+        existingUser.lookingFor = data.preferences.looking_for;
+        existingUser.languages = data.preferences.languages;
+        existingUser.country = data.preferences.country;
+        existingUser.state = data.preferences.state;
+        existingUser.district = data.preferences.district;
+        existingUser.city = data.preferences.city;
+        existingUser.interestTags = data.preferences.interest_tags;
+      }
+    });
+
+    socket.on('like_partner', async (data: { matchId: string }) => {
+      try {
+        if (!user.currentMatchId || !user.partnerSessionId) return;
+        const partner = matchingEngine.getUserBySessionId(user.partnerSessionId);
+        
+        const supabase = getSupabase();
+        
+        await supabase.from('likes').insert({ match_id: data.matchId, session_id: user.sessionId });
+        
+        const { data: match } = await supabase.from('matches').select('*').eq('id', data.matchId).single();
+        if (match) {
+          const updateData: any = {};
+          if (match.user_a === user.sessionId) {
+            updateData.liked_by_a = true;
+          } else {
+            updateData.liked_by_b = true;
+          }
+          
+          const { data: updatedMatch } = await supabase
+            .from('matches')
+            .update(updateData)
+            .eq('id', data.matchId)
+            .select()
+            .single();
+            
+          if (updatedMatch) {
+            if (updatedMatch.liked_by_a && updatedMatch.liked_by_b) {
+              socket.emit('mutual_like', { matchId: data.matchId, partnerSessionId: user.partnerSessionId });
+              if (partner) {
+                io.to(partner.socketId).emit('mutual_like', { matchId: data.matchId, partnerSessionId: user.sessionId });
+              }
+            } else {
+              if (partner) {
+                io.to(partner.socketId).emit('partner_liked', { matchId: data.matchId });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Socket] like_partner error:', err);
+      }
+    });
+
+    socket.on('chat_message', async (data: { matchId: string; message: string }) => {
+      try {
+        if (!user.currentMatchId || !user.partnerSessionId) return;
+        const partner = matchingEngine.getUserBySessionId(user.partnerSessionId);
+        
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        const { data: msg } = await getSupabase()
+          .from('temporary_messages')
+          .insert({
+            match_id: data.matchId,
+            sender_session: user.sessionId,
+            message: data.message,
+            expires_at: expiresAt
+          })
+          .select()
+          .single();
+          
+        if (msg && partner) {
+          io.to(partner.socketId).emit('new_message', {
+            matchId: data.matchId,
+            senderSessionId: user.sessionId,
+            message: data.message,
+            createdAt: msg.created_at
+          });
+        }
+      } catch (err) {
+        console.error('[Socket] chat_message error:', err);
+      }
+    });
+
+    socket.on('typing', (data: { typing: boolean }) => {
+      if (!user.partnerSessionId) return;
+      const partner = matchingEngine.getUserBySessionId(user.partnerSessionId);
+      if (partner) {
+        io.to(partner.socketId).emit('partner_typing', { typing: data.typing });
       }
     });
 

@@ -16,6 +16,10 @@ export interface RealtimeCallbacks {
   onOffer?: (data: { fromSessionId: string; offer: RTCSessionDescriptionInit }) => void;
   onAnswer?: (data: { fromSessionId: string; answer: RTCSessionDescriptionInit }) => void;
   onIceCandidate?: (data: { fromSessionId: string; candidate: RTCIceCandidateInit }) => void;
+  onPartnerLiked?: (data: { matchId: string }) => void;
+  onMutualLike?: (data: { matchId: string; partnerSessionId: string }) => void;
+  onNewMessage?: (data: { matchId: string; senderSessionId: string; message: string; createdAt: string }) => void;
+  onPartnerTyping?: (data: { typing: boolean }) => void;
 }
 
 let sessionChannel: RealtimeChannel | null = null;
@@ -68,6 +72,9 @@ function subscribeToMatchChannel(matchId: string, callbacks: RealtimeCallbacks) 
     .on('broadcast', { event: 'ice_candidate' }, ({ payload }) => {
       callbacks.onIceCandidate?.(payload as { fromSessionId: string; candidate: RTCIceCandidateInit });
     })
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      callbacks.onPartnerTyping?.(payload as { typing: boolean });
+    })
     .subscribe();
 }
 
@@ -102,6 +109,18 @@ export function connectRealtime(
     })
     .on('broadcast', { event: 'searching' }, ({ payload }) => {
       callbacks.onSearching?.(payload as { message: string });
+    })
+    .on('broadcast', { event: 'partner_liked' }, ({ payload }) => {
+      callbacks.onPartnerLiked?.(payload as { matchId: string });
+    })
+    .on('broadcast', { event: 'mutual_like' }, ({ payload }) => {
+      callbacks.onMutualLike?.(payload as { matchId: string; partnerSessionId: string });
+    })
+    .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+      callbacks.onNewMessage?.(payload as { matchId: string; senderSessionId: string; message: string; createdAt: string });
+    })
+    .on('broadcast', { event: 'partner_typing' }, ({ payload }) => {
+      callbacks.onPartnerTyping?.(payload as { typing: boolean });
     })
     .subscribe();
 }
@@ -212,4 +231,12 @@ export function sendIceCandidate(fromSessionId: string, candidate: RTCIceCandida
 
 export function getCurrentMatchId(): string | null {
   return currentMatchId;
+}
+
+export function sendTyping(typing: boolean): void {
+  matchChannel?.send({
+    type: 'broadcast',
+    event: 'typing',
+    payload: { typing },
+  });
 }

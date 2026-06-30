@@ -81,4 +81,57 @@ export const apiService = {
   ): Promise<void> {
     await api.post('/feedback', { sessionId, rating, feedback });
   },
+
+  async submitPreferences(
+    sessionId: string,
+    sessionToken: string,
+    preferences: {
+      gender?: string;
+      looking_for?: string[];
+      languages?: string[];
+      country?: string;
+      state?: string;
+      district?: string;
+      city?: string;
+      interest_tags?: string[];
+    }
+  ): Promise<void> {
+    await api.post('/preferences', { sessionId, sessionToken, preferences });
+  },
+
+  async getLocations(query: string): Promise<any[]> {
+    const { data } = await api.get(`/locations?q=${encodeURIComponent(query)}`);
+    return data.data || [];
+  },
+
+  async getInterests(query: string): Promise<any[]> {
+    const { data } = await api.get(`/interests?q=${encodeURIComponent(query)}`);
+    return data.data || [];
+  },
+
+  async submitLike(
+    sessionId: string,
+    sessionToken: string,
+    matchId: string
+  ): Promise<{ success: boolean; mutual: boolean }> {
+    const { data } = await api.post('/like', { sessionId, sessionToken, matchId });
+    return data.data;
+  },
+
+  async submitChatMessage(
+    sessionId: string,
+    sessionToken: string,
+    matchId: string,
+    message: string
+  ): Promise<any> {
+    const { data } = await api.post('/chat', { sessionId, sessionToken, matchId, message });
+    return data.data;
+  },
+
+  async getAnalytics(adminToken: string): Promise<any> {
+    const { data } = await api.get('/analytics', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    return data.data;
+  },
 };

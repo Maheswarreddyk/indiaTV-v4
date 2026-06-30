@@ -11,6 +11,12 @@ interface ChatControlsProps {
   onLeave: () => void;
   onToggleFullscreen: () => void;
   disabled?: boolean;
+  isChatOpen?: boolean;
+  onToggleChat?: () => void;
+  liked?: boolean;
+  onLike?: () => void;
+  onOpenPreferences?: () => void;
+  unreadCount?: number;
 }
 
 export function ChatControls({
@@ -24,9 +30,25 @@ export function ChatControls({
   onLeave,
   onToggleFullscreen,
   disabled = false,
+  isChatOpen = false,
+  onToggleChat,
+  liked = false,
+  onLike,
+  onOpenPreferences,
+  unreadCount = 0,
 }: ChatControlsProps) {
   return (
     <div className="flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
+      {onOpenPreferences && (
+        <button
+          onClick={onOpenPreferences}
+          className="control-btn border-accent/20 hover:bg-white/5"
+          title="Preferences"
+        >
+          ⚙️
+        </button>
+      )}
+
       <button
         onClick={onToggleMute}
         disabled={disabled}
@@ -63,10 +85,42 @@ export function ChatControls({
         )}
       </button>
 
+      {onLike && (
+        <button
+          onClick={onLike}
+          disabled={disabled}
+          className={cn(
+            "control-btn transition-transform", 
+            liked ? "bg-red-550 border-red-500 text-red-500 scale-110" : "hover:text-red-400"
+          )}
+          title="Like Partner"
+        >
+          {liked ? '❤️' : '🤍'}
+        </button>
+      )}
+
+      {onToggleChat && (
+        <button
+          onClick={onToggleChat}
+          disabled={disabled}
+          className={cn('control-btn relative', isChatOpen && 'control-btn-active')}
+          title="Toggle Chat"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-550 text-[10px] font-bold text-white animate-pulse">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+      )}
+
       <button
         onClick={onNext}
         disabled={disabled}
-        className="control-btn bg-accent/20 border-accent/40 hover:bg-accent/30"
+        className="control-btn bg-accent/20 border-accent/40 hover:bg-accent/30 animate-pulse"
         title="Next"
       >
         <svg className="w-5 h-5 text-accent-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">

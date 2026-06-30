@@ -45,6 +45,21 @@ export interface ChatState {
   isFullscreen: boolean;
   matchStartTime: number | null;
   queuePosition: number;
+  gender?: string;
+  lookingFor?: string[];
+  languages?: string[];
+  country?: string;
+  state?: string;
+  district?: string;
+  city?: string;
+  interestTags?: string[];
+  liked?: boolean;
+  partnerLiked?: boolean;
+  mutualLike?: boolean;
+  messages?: Array<{ id: string; senderSessionId: string; message: string; createdAt: number }>;
+  unreadCount?: number;
+  isChatOpen?: boolean;
+  partnerTyping?: boolean;
 }
 
 export const REPORT_REASONS: { value: ReportReason; label: string }[] = [

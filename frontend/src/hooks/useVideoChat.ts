@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '../contexts/ToastContext.js';
+import { apiService } from '../services/api.js';
 import {
   connectRealtime,
   disconnectRealtime,
@@ -10,6 +11,7 @@ import {
   sendAnswer,
   sendIceCandidate,
   sendOffer,
+  sendTyping,
 } from '../services/realtime.js';
 import { webrtcManager } from '../webrtc/index.js';
 import type { ChatState, ConnectionStatus } from '../types/index.js';
@@ -94,6 +96,12 @@ export function useVideoChat(sessionId: string | null, sessionToken: string | nu
         matchId: data.matchId,
         isInitiator: data.isInitiator,
         matchStartTime: Date.now(),
+        liked: false,
+        partnerLiked: false,
+        mutualLike: false,
+        messages: [],
+        unreadCount: 0,
+        partnerTyping: false,
       });
 
       if (data.isInitiator) {
@@ -130,6 +138,12 @@ export function useVideoChat(sessionId: string | null, sessionToken: string | nu
           partnerSessionId: null,
           matchId: null,
           matchStartTime: null,
+          liked: false,
+          partnerLiked: false,
+          mutualLike: false,
+          messages: [],
+          unreadCount: 0,
+          partnerTyping: false,
         });
         showToast('info', 'Partner left. Finding someone new...');
       },
@@ -139,6 +153,34 @@ export function useVideoChat(sessionId: string | null, sessionToken: string | nu
       },
       onError: (data: { message: string }) => {
         showToast('error', data.message);
+      },
+      onPartnerLiked: () => {
+        updateChatState({ partnerLiked: true });
+        showToast('success', 'Your partner liked you! ❤️');
+      },
+      onMutualLike: () => {
+        updateChatState({ mutualLike: true });
+        showToast('success', "It's a Match! ❤️");
+      },
+      onNewMessage: (data: { matchId: string; senderSessionId: string; message: string; createdAt: string }) => {
+        setChatState((prev) => {
+          const newMessages = prev.messages ? [...prev.messages] : [];
+          newMessages.push({
+            id: Math.random().toString(),
+            senderSessionId: data.senderSessionId,
+            message: data.message,
+            createdAt: new Date(data.createdAt).getTime(),
+          });
+          const unread = prev.isChatOpen ? 0 : (prev.unreadCount || 0) + 1;
+          return {
+            ...prev,
+            messages: newMessages,
+            unreadCount: unread,
+          };
+        });
+      },
+      onPartnerTyping: (data: { typing: boolean }) => {
+        updateChatState({ partnerTyping: data.typing });
       },
       onOffer: async (data: { fromSessionId: string; offer: RTCSessionDescriptionInit }) => {
         try {
@@ -277,6 +319,70 @@ export function useVideoChat(sessionId: string | null, sessionToken: string | nu
     };
   }, []);
 
+  const updatePreferences = useCallback(async (prefs: any) => {
+    if (!sessionId || !sessionToken) return;
+    try {
+      await apiService.submitPreferences(sessionId, sessionToken, prefs);
+      setChatState((prev) => ({
+        ...prev,
+        gender: prefs.gender,
+        lookingFor: prefs.looking_for,
+        languages: prefs.languages,
+        country: prefs.country,
+        state: prefs.state,
+        district: prefs.district,
+        city: prefs.city,
+        interestTags: prefs.interest_tags,
+      }));
+    } catch (error) {
+      showToast('error', 'Failed to update preferences');
+    }
+  }, [sessionId, sessionToken, showToast]);
+
+  const likePartner = useCallback(async () => {
+    if (!sessionId || !sessionToken || !chatState.matchId) return;
+    try {
+      const result = await apiService.submitLike(sessionId, sessionToken, chatState.matchId);
+      setChatState((prev) => ({ ...prev, liked: true, mutualLike: result.mutual }));
+      if (result.mutual) {
+        showToast('success', "It's a Match! ❤️");
+      }
+    } catch (error) {
+      showToast('error', 'Failed to like partner');
+    }
+  }, [sessionId, sessionToken, chatState.matchId, showToast]);
+
+  const sendChatMessage = useCallback(async (message: string) => {
+    if (!sessionId || !sessionToken || !chatState.matchId) return;
+    try {
+      const msg = await apiService.submitChatMessage(sessionId, sessionToken, chatState.matchId, message);
+      setChatState((prev) => {
+        const newMessages = prev.messages ? [...prev.messages] : [];
+        newMessages.push({
+          id: Math.random().toString(),
+          senderSessionId: sessionId,
+          message,
+          createdAt: new Date(msg.created_at).getTime(),
+        });
+        return { ...prev, messages: newMessages };
+      });
+    } catch (error) {
+      showToast('error', 'Failed to send message');
+    }
+  }, [sessionId, sessionToken, chatState.matchId, showToast]);
+
+  const setTypingStatus = useCallback((typing: boolean) => {
+    sendTyping(typing);
+  }, []);
+
+  const setChatOpen = useCallback((open: boolean) => {
+    setChatState((prev) => ({
+      ...prev,
+      isChatOpen: open,
+      unreadCount: open ? 0 : prev.unreadCount,
+    }));
+  }, []);
+
   return {
     chatState,
     localStream,
@@ -287,5 +393,10 @@ export function useVideoChat(sessionId: string | null, sessionToken: string | nu
     toggleMute,
     toggleCamera,
     toggleFullscreen,
+    updatePreferences,
+    likePartner,
+    sendChatMessage,
+    setTypingStatus,
+    setChatOpen,
   };
 }
