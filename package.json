@@ -1,0 +1,24 @@
+{
+  "name": "indiatv",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IndiaTV - Anonymous Random Video Chat Platform",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w indiatv-backend\" \"npm run dev -w indiatv-frontend\"",
+    "dev:backend": "npm run dev -w indiatv-backend",
+    "dev:frontend": "npm run dev -w indiatv-frontend",
+    "build": "npm run build -w indiatv-backend && npm run build -w indiatv-frontend",
+    "start": "npm run start -w indiatv-backend",
+    "test:integration": "node scripts/integration-test.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
