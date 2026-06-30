@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { AppError, json, withHandler } from '../lib/handler.js';
-import { leaveQueue } from '../lib/services.js';
+import { AppError, json, withHandler } from '../_lib/handler.js';
+import { leaveQueue } from '../_lib/services.js';
 
 export default withHandler(async (req: VercelRequest, res: VercelResponse) => {
   if (req.method !== 'POST') {
