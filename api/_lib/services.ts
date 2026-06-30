@@ -205,39 +205,63 @@ export async function joinQueue(sessionId: string, sessionToken: string) {
     };
   }
 
-  await getSupabase()
+  // 2. Check if they are already in the queue
+  const { data: existingQueueEntry, error: queueError } = await getSupabase()
     .from('waiting_queue')
-    .update({ status: 'left' })
+    .select('id, joined_at')
     .eq('session_id', sessionId)
-    .eq('status', 'waiting');
+    .eq('status', 'waiting')
+    .maybeSingle();
+
+  if (queueError) handleSupabaseError(queueError, 'Failed to query queue status');
+
+  const now = new Date().toISOString();
+
+  if (existingQueueEntry) {
+    // Heartbeat: update joined_at to keep it fresh
+    await getSupabase()
+      .from('waiting_queue')
+      .update({ joined_at: now })
+      .eq('id', existingQueueEntry.id);
+  } else {
+    // Clear any stale entries for this user and insert a new waiting entry
+    await getSupabase()
+      .from('waiting_queue')
+      .update({ status: 'left' })
+      .eq('session_id', sessionId)
+      .eq('status', 'waiting');
+
+    const { error: joinError } = await getSupabase()
+      .from('waiting_queue')
+      .insert({ session_id: sessionId, status: 'waiting', joined_at: now });
+
+    if (joinError) handleSupabaseError(joinError, 'Failed to join queue');
+    await getSupabase().from('visitor_sessions').update({ status: 'waiting' }).eq('id', sessionId);
+    await getSupabase()
+      .from('connection_logs')
+      .insert({ session_id: sessionId, event: 'queue_join', details: {} });
+  }
+
+  // 3. Search for a partner who is actively waiting (heartbeat within last 12 seconds)
+  const heartbeatThreshold = new Date(Date.now() - 12000).toISOString();
 
   const { data: waitingUsers, error: waitingError } = await getSupabase()
     .from('waiting_queue')
     .select('session_id, joined_at')
     .eq('status', 'waiting')
     .neq('session_id', sessionId)
+    .gte('joined_at', heartbeatThreshold)
     .order('joined_at', { ascending: true })
     .limit(1);
 
   if (waitingError) handleSupabaseError(waitingError, 'Failed to query queue');
 
   if (!waitingUsers || waitingUsers.length === 0) {
-    const { error: joinError } = await getSupabase()
-      .from('waiting_queue')
-      .insert({ session_id: sessionId, status: 'waiting' });
-
-    if (joinError) handleSupabaseError(joinError, 'Failed to join queue');
-
-    await getSupabase().from('visitor_sessions').update({ status: 'waiting' }).eq('id', sessionId);
-
-    await getSupabase()
-      .from('connection_logs')
-      .insert({ session_id: sessionId, event: 'queue_join', details: {} });
-
     const { count } = await getSupabase()
       .from('waiting_queue')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'waiting');
+      .eq('status', 'waiting')
+      .gte('joined_at', heartbeatThreshold);
 
     return {
       status: 'waiting' as const,
@@ -247,6 +271,23 @@ export async function joinQueue(sessionId: string, sessionToken: string) {
   }
 
   const partnerSessionId = waitingUsers[0].session_id;
+
+  // Deterministic Matchmaking: only the user with the smaller ID creates the match record.
+  // If the current user has the larger ID, they return 'waiting' and wait for the match record
+  // created by the partner in their own next poll / broadcast.
+  if (sessionId > partnerSessionId) {
+    const { count } = await getSupabase()
+      .from('waiting_queue')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'waiting')
+      .gte('joined_at', heartbeatThreshold);
+
+    return {
+      status: 'waiting' as const,
+      queuePosition: count ?? 1,
+      message: 'Waiting for a partner...',
+    };
+  }
 
   const { data: match, error: matchError } = await getSupabase()
     .from('matches')

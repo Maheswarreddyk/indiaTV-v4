@@ -246,6 +246,22 @@ export function useVideoChat(sessionId: string | null, sessionToken: string | nu
   }, []);
 
   useEffect(() => {
+    if (chatState.status !== 'waiting' || !sessionId || !sessionToken || !callbacksRef.current) {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        await joinQueue(sessionId, sessionToken, callbacksRef.current!);
+      } catch (error) {
+        console.error('Error polling matchmaking queue:', error);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [chatState.status, sessionId, sessionToken]);
+
+  useEffect(() => {
     const handleUnload = () => {
       if (sessionIdRef.current && sessionTokenRef.current) {
         notifyDisconnect(sessionIdRef.current, sessionTokenRef.current, 'disconnect');
