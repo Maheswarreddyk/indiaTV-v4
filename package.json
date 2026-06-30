@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vercel dev",
     "dev:frontend": "npm run dev -w indiatv-frontend",
-    "build": "npm run build -w indiatv-frontend",
+    "build": "npm run build -w indiatv-frontend && node scripts/copy-build.js",
     "preview": "npm run preview -w indiatv-frontend",
     "typecheck": "npm run typecheck -w indiatv-frontend"
   },
