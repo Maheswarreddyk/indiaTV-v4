@@ -12,6 +12,8 @@ import routes from './routes/index.js';
 import { setupSocketHandlers } from './socket/index.js';
 import { cleanupService, statsService } from './services/index.js';
 import { matchingEngine } from './services/matchingEngine.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const server = http.createServer(app);
@@ -43,12 +45,18 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api', routes);
 
-app.get('/', (_req, res) => {
-  res.json({
-    name: 'IndiaTV API',
-    version: '1.0.0',
-    status: 'running',
-  });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distPath = path.resolve(__dirname, '../../dist');
+
+// Serve static assets from frontend build if it exists
+app.use(express.static(distPath));
+
+// For SPA routes, fallback to index.html
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+    return next();
+  }
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 app.use(notFoundHandler);
